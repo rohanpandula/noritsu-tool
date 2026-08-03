@@ -21,7 +21,7 @@ def _normalize(arr, linearize_srgb):
 
 
 def _load_raw(path):
-    """Load a raw scanner capture (NEF/DNG/CR2/...) as linear RGB via rawpy.
+    """Load a raw scanner capture (NEF/DNG/ARW/CR2/...) as linear RGB via rawpy.
 
     Returns float32 (H,W,3) in ~[0,1] linear (no gamma, no camera WB, no
     auto-bright) — i.e. proportional to scene/negative transmittance.
@@ -29,23 +29,27 @@ def _load_raw(path):
     import rawpy
     with rawpy.imread(str(path)) as raw:
         black = np.array(raw.black_level_per_channel[:3], dtype=np.float32)
-        rgb = raw.postprocess(
+        kw = dict(
             output_color=rawpy.ColorSpace.raw,
             output_bps=16,
             gamma=(1, 1),          # linear, no gamma
             no_auto_bright=True,
             use_camera_wb=False,   # keep raw channel response; WB handled later
-            use_black=False,       # we subtract black ourselves
             demosaic_algorithm=rawpy.DemosaicAlgorithm.AHD,
         )
+        # rawpy >= 0.20 supports use_black; subtract the black level ourselves
+        # so the API stays compatible across rawpy versions.
+        rgb = raw.postprocess(**kw)
     out = rgb.astype(np.float32)
     out = out - black[None, None, :]   # remove sensor black offset
     out = np.clip(out, 0, None)
-    out = out / (65535.0 - black[None, None, :])
+    denom = 65535.0 - black[None, None, :]
+    denom = np.where(denom > 0, denom, 1.0)
+    out = out / denom
     return np.clip(out, 0, 1).astype(np.float32)
 
 
-RAW_EXTS = (".nef", ".dng", ".cr2", ".cr3", ".arf", ".raf", ".orf", ".rw2")
+RAW_EXTS = (".nef", ".dng", ".arw", ".cr2", ".cr3", ".arf", ".raf", ".orf", ".rw2")
 
 
 def load_image(path, linearize_srgb=False):
