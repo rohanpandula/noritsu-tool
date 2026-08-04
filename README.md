@@ -79,10 +79,34 @@ Common options:
 ## Fidelity
 
 The inversion math is validated by a round-trip test (`test_roundtrip.py`,
-~0.4% mean error); `calibrate.py` can fit the render to any reference output at
-~0.12% error. The tone curve and color stages are a faithful approximation of
-the Noritsu rendering, recovered from the engine's `CommonCalcPara` tone-curve
-tables and `SpecialPcb` per-film tables.
+~0.4% mean error). The tone curve and color stages are a faithful approximation
+of the Noritsu rendering, recovered from the engine's `CommonCalcPara`
+tone-curve tables and `SpecialPcb` per-film tables.
+
+**Validated against a real LS-600** (2026): an LS-600 owner provided raw scan
+frames (`FULL*.RAW`, headerless 3×uint16 BGR, 12-bit, 4042×6391), the
+machine's own processed 16-bit positives, and the real per-frame Correction
+Files (`.prm`, 0x504E8 bytes). That confirmed the recovered CF format
+field-for-field (checksum = signed-byte sum of the tail at u32[0], size,
+CorrParamHead=5, `NKC-ICCS` magic, SrcImg path), and `calibrate.py` reproduced
+the machine's rendering character (luma correlation ~0.7 on most frames). It is
+a character match, not a pixel match: the residual gap is the machine's
+spatial correction stack (ICE/dust masking, shading, geometric crop/resample),
+which a per-pixel LUT cannot reproduce.
+
+## LS-600 raw scan input
+
+`noritsu/ls600raw.py` decodes the scanner's `FULL*.RAW` frames
+(headerless 3×uint16 LE BGR, 12-bit data, 6391×4042):
+
+```python
+from noritsu.ls600raw import load_ls600_raw
+arr = load_ls600_raw("FULL000000010000.RAW")   # float32 (6391,4042,3) BGR [0,1]
+```
+
+Feed that straight into the CLI or `pipeline.process_negative`. The loader is
+new; sizes/order were recovered from real LS-600 frames and verified against
+the machine's own outputs.
 
 See `samples/compare.jpg` for a side-by-side.
 
