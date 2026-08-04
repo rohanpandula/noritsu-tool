@@ -138,3 +138,42 @@ MIT. The reverse-engineering was done from public installer binaries for
 research/compatibility purposes; no Noritsu source code, firmware, or vendor
 binaries are distributed here — only the format knowledge recovered from them
 and this original implementation.
+
+## Coolscan → Noritsu workflow (2026-08-04)
+
+This pipeline works with any scanner's linear C-41 raw, not just the LS-600.
+The density inversion is scanner-agnostic — the math doesn't care which CCD
+captured the transmittance.
+
+### From Scan Studio archive
+
+Scan Studio exports full-res linear TIFFs in its `Archive/` folder:
+
+```
+python -m noritsu.cli ScanStudio1.tif -o noritsu_render.tif \
+  --gamma 0.8 --contrast 1.15 --sat 1.2 --dmax-pct 98.0 --preview
+```
+
+### Tuning for your negative
+
+The defaults assume a normally-dense C-41 negative. If your frame looks
+underexposed (thin negative), the pipeline compensates:
+
+| Negative | `--dmax-pct` | `--gamma` | Result |
+|---|---|---|---|
+| Normal/dense | 99.5–99.8 | 0.9–1.0 | Standard Noritsu |
+| Thin/underexposed | 98.0 | 0.7–0.8 | Lifted, open shadows |
+| Overexposed/dense | 99.9 | 1.0–1.1 | Rich, punchy |
+
+Key insight: gamma > 1 on a low-contrast positive makes things *darker*.
+For a thin negative, lower gamma (0.7–0.8) lifts the image to proper exposure.
+Add `--contrast 1.05–1.15` to restore snap.
+
+The real LS-600 calibration (`--calib`) does not transfer to other scanners —
+it encodes the LS-600's specific CCD spectral response. The generic pipeline
+is the correct approach for cross-scanner use.
+
+### Validated
+
+A real LS-600 owner's raw frames plus a Coolscan 5000 full-res archive both
+produce beautiful Noritsu-style positives through this pipeline.
