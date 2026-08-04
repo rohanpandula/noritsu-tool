@@ -57,6 +57,17 @@ reference captures. If we get (a) raw linear neg + (b) machine's positive +
 3. Compare against `Exports/LRFrontierExport.tif` and the recoveries.
 4. Update JOURNEY (Addendum 16+) and BLOG with the calibrated result.
 
+## Side quest (project #2): Fuji Frontier SP-3000 software
+- Goal: get the **Frontier SP-3000 operating software / lab-PC install** (the
+  prize = its color tables/pipeline, same playbook as Noritsu). Fallback if
+  software is unrecoverable: a **neg→positive pair** from an SP-3000 owner.
+- Sources to try: Frontier home-lab FB groups; Yahoo Auctions JP (machines/CDs);
+  Archive.org + service-forum dark horses. Verify any candidate with me before
+  buying (is it the real engine vs a service doc?).
+- Known context: the "SP-3000 look" is the contrasty/colorful high-res 35mm
+  scan everyone chases — arguably more in-demand than the Noritsu look. It's
+  Fuji code, so fresh RE (no table reuse), likely similar effort to Noritsu.
+
 ## Environment / gotchas
 - VM (Windows, headless engine) still runs; the SSH key path is in the local
   JOURNEY only — never commit it or the VM IP.
