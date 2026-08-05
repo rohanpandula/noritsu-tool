@@ -2,3 +2,8 @@ __pycache__/
 *.pyc
 *.tif
 .DS_Store
+
+# Private task tracking, personal notes, scan data paths
+TODO.md
+continue.md
+*.private.md
