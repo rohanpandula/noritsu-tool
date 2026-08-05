@@ -62,6 +62,10 @@ def main():
     print("mean abs error vs original: %.4f" % err.mean())
     print("95th pct abs error:         %.4f" % np.percentile(err, 95))
     print("outputs written to:", outdir)
+    # regression gates (typical values: mean 0.0002, p95 0.0011)
+    assert err.mean() < 0.005, "roundtrip mean error too high: %.4f" % err.mean()
+    assert np.percentile(err, 95) < 0.02, "roundtrip p95 error too high"
+    print("PASS")
 
 
 if __name__ == "__main__":
