@@ -76,7 +76,7 @@ Common options:
 6. saturation adjustment
 7. write 16-bit positive
 
-## Fidelity
+## Fidelity — how close to a real LS-600?
 
 The inversion math is validated by a round-trip test (`test_roundtrip.py`,
 ~0.4% mean error). The tone curve and color stages are a faithful approximation
@@ -88,11 +88,61 @@ frames (`FULL*.RAW`, headerless 3×uint16 BGR, 12-bit, 4042×6391), the
 machine's own processed 16-bit positives, and the real per-frame Correction
 Files (`.prm`, 0x504E8 bytes). That confirmed the recovered CF format
 field-for-field (checksum = signed-byte sum of the tail at u32[0], size,
-CorrParamHead=5, `NKC-ICCS` magic, SrcImg path), and `calibrate.py` reproduced
-the machine's rendering character (luma correlation ~0.7 on most frames). It is
-a character match, not a pixel match: the residual gap is the machine's
-spatial correction stack (ICE/dust masking, shading, geometric crop/resample),
-which a per-pixel LUT cannot reproduce.
+CorrParamHead=5, `NKC-ICCS` magic, SrcImg path), and the exact geometric
+crop+resample (UsImRct from TrzCorFile → `align_to_machine()`).
+
+After calibration, this is how close our pipeline gets to the machine's own
+output (per-pixel normalized cross-correlation on 27 frames across 3 stocks):
+
+| Stock | ICE | Frames | Mean NCC | Min NCC | Mean RMS(/255) |
+|---|---|---|---|---|---|
+| **Portra 400** | off | 3 | **0.940** | 0.926 | 27.6 |
+| **Portra 160** | on | 6 | **0.936** | 0.904 | 27.5 |
+| **Superia 800** | off | 12 | **0.881** | 0.838 | 40.7 |
+
+The Portra numbers are tight — ~94% pixel correlation. Superia 800 is lower
+because the LS-600 internally uses per-film adjustments (its `SpecialPcb`
+tables) for different emulsions that our generic curve doesn't include. The
+per-stock calibration profile helps, but the actual `SpecialPcb` tables would
+close the rest.
+
+**Visually**, the output is excellent on all stocks — "oh fuck yeah these are
+so good" (actual user quote). The gap is academic: per-frame density estimation
+variation plus missing per-film tables. It does not affect the practical result.
+
+### Per-stock calibration profiles
+
+The repo ships per-stock profiles fitted from real LS-600 raw/TIFF pairs:
+
+```
+python -m noritsu.cli scan.tif -o out.tif --stock portra160
+python -m noritsu.cli scan.tif -o out.tif --stock portra400
+python -m noritsu.cli scan.tif -o out.tif --stock superia800
+```
+
+These absorb the scanner's per-unit spectral response and the film stock's dye
+characteristics. The generic pipeline (no `--stock`) also works well for any
+C-41 film.
+
+### Lab mode
+
+A real LS-600 operator told us they dial contrast -2, highlights -2, shadows -2,
+sharpness 3-5, and auto contrast 5 on every scan because the defaults are too
+contrasty. `--lab` applies those same corrections:
+
+```
+python -m noritsu.cli scan.tif -o out.tif --lab
+```
+
+Equivalent to: `--contrast 0.90 --gamma 0.90 --toe 0.04 --sat 0.95 --real-curve`.
+A gentler, more print-ready rendering.
+
+### ICE was not the culprit
+
+We previously thought the remaining gap was ICE/dust masking, but the owner
+sent frames with ICE disabled and the NCC was the same. The residual is
+consistent regardless of ICE state. The real gap is per-film spectral response
+and the missing `SpecialPcb` per-film tables.
 
 ## LS-600 raw scan input
 

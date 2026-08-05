@@ -116,6 +116,13 @@ def run_one(in_path, out_path, args, quiet=False):
         elif not quiet:
             print(f"  warning: no profile for {args.stock}, continuing without calibration")
 
+    # Lab mode: override tone params to match LS-600 operator settings
+    # (contrast -2, highlights -2, shadows -2, auto contrast 5)
+    lab_contrast = 0.90 if args.lab else args.contrast
+    lab_gamma = 0.90 if args.lab else args.gamma
+    lab_toe = 0.04 if args.lab else args.toe
+    lab_sat = 0.95 if args.lab else args.saturation
+
     out, meta, wb = pipeline.process_negative(
         img,
         black=args.black,
@@ -124,13 +131,13 @@ def run_one(in_path, out_path, args, quiet=False):
         dmin_percentile=args.dmin_pct,
         dmax_percentile=args.dmax_pct,
         use_border=not args.no_border,
-        tone_contrast=args.contrast,
-        tone_toe=args.toe,
-        tone_gamma=args.gamma,
+        tone_contrast=lab_contrast,
+        tone_toe=lab_toe,
+        tone_gamma=lab_gamma,
         wb_gains=parse_gains(args.wb),
-        saturation=args.saturation,
+        saturation=lab_sat,
         auto_wb=not args.no_auto_wb,
-        real_curve=args.real_curve,
+        real_curve=args.lab or args.real_curve,
         calib=calib,
         crop=not args.no_crop,
     )
@@ -153,3 +160,10 @@ def run_one(in_path, out_path, args, quiet=False):
 
 if __name__ == "__main__":
     sys.exit(main())
+
+    r.add_argument("--lab", action="store_true",
+                   help="'lab mode' — closer to what a Noritsu lab tech would deliver. "
+                        "Reduces contrast, lifts shadows, tames highlights. Based on "
+                        "feedback from an LS-600 operator who dials contrast -2, "
+                        "highlights -2, shadows -2, auto contrast 5, sharpness 3-5 "
+                        "vs the stock defaults.")
