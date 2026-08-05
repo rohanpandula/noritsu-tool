@@ -73,6 +73,12 @@ def main(argv=None):
     r.add_argument("--stock", type=str, default=None,
                    choices=["portra160", "portra400", "superia800"],
                    help="auto-select a per-stock calibration profile (from real LS-600 pairs)")
+    r.add_argument("--lab", action="store_true",
+                   help="'lab mode' — closer to what a Noritsu lab tech would deliver. "
+                        "Reduces contrast, lifts shadows, tames highlights. Based on "
+                        "feedback from an LS-600 operator who dials contrast -2, "
+                        "highlights -2, shadows -2, auto contrast 5, sharpness 3-5 "
+                        "vs the stock defaults.")
 
     args = ap.parse_args(argv)
 
@@ -160,10 +166,3 @@ def run_one(in_path, out_path, args, quiet=False):
 
 if __name__ == "__main__":
     sys.exit(main())
-
-    r.add_argument("--lab", action="store_true",
-                   help="'lab mode' — closer to what a Noritsu lab tech would deliver. "
-                        "Reduces contrast, lifts shadows, tames highlights. Based on "
-                        "feedback from an LS-600 operator who dials contrast -2, "
-                        "highlights -2, shadows -2, auto contrast 5, sharpness 3-5 "
-                        "vs the stock defaults.")
