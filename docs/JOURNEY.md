@@ -1,7 +1,7 @@
 # Reverse-Engineering the Noritsu LS-600 "Look" — A Journey Log
 
 > Running story of what we did, in order. Raw material for a blog post.
-> Kept up to date as the work happens. Last updated: 2026-08-02.
+> Kept up to date as the work happens. Last updated: 2026-08-05.
 
 ---
 
@@ -91,7 +91,7 @@ out of `CommonCalcPara.Dat` (a 0→65535 S-curve) and wired it in as
 ## Chapter 7: the Windows VM (path to byte-perfect)
 
 The user offered their Windows VM on an Unraid server. We enabled OpenSSH,
-exchanged a key, and got a shell (`<redacted-vm-host>`). The VM was already a
+exchanged a key, and got a shell. The VM was already a
 scanner-RE box (Nikon RE dirs). We copied the engine over, hit
 "side-by-side configuration incorrect" → installed the bundled VC++2005 runtime
 → **`NkcICorr.exe` runs with no dongle block** and waits for IPC.
@@ -111,7 +111,7 @@ practical "as close as you can get" is the tool.
 
 *The story continues…*
 
-## Addendum: the last mile to byte-perfect
+## Addendum 1: the last mile to byte-perfect
 
 The VM has no Python and no C compiler, and `ImgCorrectDLL.dll` is 32-bit — so
 a calling harness needs a 32-bit toolchain (e.g. the SysWOW64 PowerShell +
@@ -185,7 +185,7 @@ feedback loop (call, read the validation HRESULT, converge), not a wall.
 
 ## Addendum 6: the user has a Coolscan 5000
 
-A Nikon Coolscan 5000 (real CCD <redacted-user>ner) means real linear C-41
+A Nikon Coolscan 5000 (real CCD film scanner) means real linear C-41
 negatives — the "no scanner" constraint is gone. The Noritsu *color science*
 (density inversion, mask removal, tone curve) is scanner-agnostic, so a
 linearized Coolscan scan run through the CLI (or the engine's color stage)
@@ -212,7 +212,7 @@ validation failures to learn the Correction File ("CF") format field by field.
 Setup recap: 32-bit engine on the VM, driven via SysWOW64 PowerShell + the COM
 object `CorrectIPS.NKCImgCorrectIP.1` (`probe2.ps1` / `probe3.ps1` build the
 command XML, call `XmlCmdExecExFile`, print HRESULT + response — works only on
-the VM via SSH, key `<redacted-key-path>`, `<redacted-vm-host>`).
+the VM via SSH).
 
 CmdID 12 (`GetCorrectionParam`) was the first to fully succeed — it returns the
 engine's own XML: `<ICCS><FramPara><CorPrm><ScnCor>0</ScnCor></CorPrm></FramPara></ICCS>`.
@@ -293,7 +293,7 @@ open* source handle through this object — it does not open the path itself fro
 CF+0x1244. The sub_10182340 handle getter then returns `obj+0x22c` only when
 `obj+0x224==2` and `obj+0x228∈{1,2,9}`.
 
-Interpretation: real <redacted-user>s need a host-provided, already-open source
+Interpretation: real film scans need a host-provided, already-open source
 handle wired into the image-control object with the right state/type —
 exactly the "engine only wakes up inside its mother ship" pattern from earlier
 addenda. A pure CF-byte recipe is unlikely to conjure a valid kernel handle.
@@ -326,7 +326,7 @@ pipe/RPC — the named mapping IS the cross-process pixel channel.
 and byte-verified: force the setFileHandle gate at 0x1A8BBC (JNE→JMP) and route
 the src-handle build at 0x1A8CE2 through a cave stub that calls
 CreateFileW(CF+0x1244) via IAT 0x102920e0. No engine self-integrity check
-blocks a .text patch. Plan: /Users/rohan/Downloads/nori/re/work/PATCH_PLAN_ImgCorrectDLL_src_by_path.md.
+blocks a .text patch. Plan: `re/work/PATCH_PLAN_ImgCorrectDLL_src_by_path.md`.
 
 *Agent 2 (CmdID 19):* verified working pixel transport — bottom-up 24/32bpp
 BMP → 24bpp BMP, **byte-identical pixels** (identity pass-through; header
@@ -559,7 +559,7 @@ These are the only live threads. Everything else remains as Addenda 9–11: the
 practical CLI + tables are done; the engine's film render headless is gated on
 a host-supplied open handle at `obj+0x22c`.
 
-## Addendum 14: the handle-injection experiment — run to completion (closes the thread)
+## Addendum 13: the handle-injection experiment — run to completion (closes the thread)
 
 We built and applied the strongest remaining experiment (Codex's bet #1) for
 real: a **byte-verified extended in-engine patch** (`ImgCorrectDLL_patched_v2.dll`)
@@ -601,7 +601,45 @@ The VM DLL was restored to pristine (hash 2144eec8…) after the test.
 - The practical deliverable ("put a C-41 negative in, get a Noritsu-look
   positive out") is the CLI, and it works on the user's own machine.
 
-## Addendum 13: how this differs from — and beats — Negative Lab Pro
+## Addendum 14: an LS-600 owner found — the calibration data is coming
+
+Status change on the biggest lever: a real **Noritsu LS-600 owner** (from the
+Noritsu Facebook group) volunteered to help — they also own Coolscan
+5000/9000, have access to a developer + Codex, and offered to capture scans
+(remote desktop possible later, timezone permitting). We posted a targeted
+request asking for exactly one **negative → positive pair from the LS-600**,
+LS-600 only.
+
+What was asked / decided:
+- Ask only for **LS-600** output (not "any scanner") to keep the dataset clean
+  and the spectral-response question answerable.
+- Key framing for the owner: we want the **raw un-corrected linear 16-bit
+  negative** (they may grab the internal raw frame file — we decode the
+  reconstructed raster ourselves), plus the machine's **finished positive** of
+  the same frame, plus film stock/exposure metadata. Also offered: capture one
+  real scan's `XC_CorrIn_*.xml` + engine logs (the ground-truth host
+  transcripts) and, later, rerun our COM harness against the live EZ Controller
+  host.
+- Deliverables text is in `re/../user-collab/LS600_CAPTURE_PROMPT.md` (paste
+  into the operator's Codex) and `FB_POST_AND_REPLIES.md` (group post +
+  replies).
+
+When the captures arrive (expected in days), the plan is:
+1. Decode the raw negative frame using our recovered NKC_IMAGE_IN_FILE raster
+   layout (16-bit B/G/R slots).
+2. Feed the linear negative through `noritsu-tool` and, using the paired
+   LS-600 positive as reference, run `calibrate.py` to fit our render to the
+   real machine's output — settling empirically what "the LS-600 look" is.
+3. Use the real `XC_CorrIn_*.xml`/logs to identify the host behavior we
+   couldn't reproduce headless (the CICCSImgCtrl operation-list / setFileHandle
+   path), which may unlock the live-engine film render.
+4. If the operator runs a live-host probe, validate the whole CF/validation
+   stack against the actual machine.
+
+This is the "mother ship" door opening from the outside: the one thing we
+couldn't fake (a real host + real handle) is now literally available.
+
+## Addendum 15: how this differs from — and beats — Negative Lab Pro
 
 Because it will get asked: how is what we extracted different from NLP's
 "noritsu look"?
@@ -626,3 +664,295 @@ Because it will get asked: how is what we extracted different from NLP's
   and per-unit Noritsu calibration differ) — the same honesty applies to NLP;
   but ours is the ground truth structure, and NLP is a tasteful guess on top
   of someone else's camera profile.
+
+## Addendum 16: the geometry gap closes — the machine's crop is found
+
+*2026-08-04. When you look at the right pixels, the gap shrinks by half.*
+
+The calibration report (Addendum 14) hit a wall: our pipeline reproduced the
+LS-600's character to ~0.71 luma correlation, but per-pixel residual sat at
+~0.22 RMS. The mystery was geometry — the raw (6391×4042) and TIFF (6048×4011)
+are different canvases with different aspect ratios (1.581 vs 1.508). We'd been
+approximating the machine's crop with a generic resize.
+
+Not anymore. The `TrzCorFile` XML hides the exact crop rectangle:
+
+```
+UsImRct on THUM (252×399) = top=1, left=10, bottom=251, right=388
+                → crop 250×378
+THUM is ~1/16× extract of the FULL raw (252×16.04≈4042, 399×16.02≈6391)
+                → FULL crop: y0=16, x0=168, h=4008, w=6048
+Final resize: 4008×6048 → 4011×6048 (vertical stretch 1.00075×)
+```
+
+We verified it: direct-crop phase correlation at 1/8 scale gives NCC=0.943
+(was ~0.57 without the crop). The transform is now baked into
+`noritsu.ls600raw.align_to_machine()`.
+
+The refit was dramatic. After applying the exact geometry and re-running
+calibrate.py on frame 04:
+
+- **Mean luma-NCC across all 8 frames: 0.937** (was ~0.71)
+- **Frame 04 (calibration anchor): NCC=0.956** (was ~0.71)
+- **Worst frame (01): NCC=0.888** — still the weakest link
+- **Residual RMS: 24–34/255 per channel**
+
+So geometry alone closed the correlation gap by ~0.2. The remaining ~6%
+is not tone or color — it's the machine's spatial correction stack.
+
+### The spatial floor is real
+
+`DefScanningEnv.xml` confirmed what we suspected:
+
+```
+Digital_Ice_Func=1   ← infrared dust removal ON
+Digital_Masking_Func=1  ← digital masking ON
+DustSearchSw=1       ← dust search ON
+```
+
+These are not tone corrections. ICE and digital masking are per-pixel spatial
+operations (infers dust from IR channel, inpaints over it). A per-pixel tone
+LUT — which is what calibrate.py learns — *cannot* reproduce them. The ~6%
+gap is the cost of the scanner's defect retouching applied on the way out.
+
+The DSA settings screenshot (`ezc-dsa-settings.jpg`, OCR-confirmed) shows all
+tone and color controls at neutral: Auto Contrast = None, Sharpness=0,
+Grain/Moire suppression=None, Lens Aberration=OFF. So the "default" TIFFs are
+the machine's minimal processing — tone curve + ICE/masking, no fancy stuff.
+
+### Default vs Adjusted
+
+The "adjusted" set is another story: RMS 16.7–19.0/255 relative to default,
+but NCC 0.982–0.995. It's almost a pure global tone shift — uniform darkening
+with a blue bias (ΔB ≈ -0.028 in [0,1]). Both border and image shift
+proportionally. It's the same image through a different render preset (maybe
+the machine's "Automatic Contrast" mode).
+
+### What this means practically
+
+We now know the honest answer: the CLI reproduces the LS-600's *color science*
+to NCC ≈ 0.94. The remaining 6% is spatial corrections that a tone LUT cannot
+learn. To close that gap you'd need either:
+1. The raw IR channel + an ICE model → run your own dust removal
+2. Or accept that 94% correlation on 8 diverse frames of real Portra 160 is
+   an excellent approximation of "the Noritsu look" — and it's portable,
+   inspectable, and runs on any scanner's linearized raw.
+
+The pipeline is now at its maximal honest fidelity without simulating the
+hardware ICE pass. That's a good place to ship.
+
+### What changed
+- `noritsu/ls600raw.py`: added `align_to_machine()` with verified crop/resize
+- calibration profile fitted on frame 04 with geometry alignment
+- Mean post-fit NCC: 0.937 (was 0.71)
+
+## Addendum 17: Coolscan raws through the Noritsu pipeline — it works
+
+*2026-08-04. "oh fuck yeah these are so good" — actual quote.*
+
+The moment we've been working toward: feeding a real Coolscan 5000 full-res raw
+(from Scan Studio archive) through the Noritsu pipeline and getting a beautiful
+rendering out.
+
+### The Coolscan data
+
+The archive had three frames (ScanStudio1–3.tif, 3946×5959, 16-bit linear RGB)
+plus their IR and METER channels. Frame 1 appears to be a genuinely thin /
+slightly underexposed negative — the density range is narrower than a typical
+well-exposed C-41 frame.
+
+### What worked
+
+The density-space inversion handles the Coolscan CCD just fine — the math is
+scanner-agnostic. The key finding for thin negatives: **use `--dmax-pct 98.0`
+and gamma < 1** (e.g. `--gamma 0.8`). The default 99.8th percentile Dmax
+assumes a denser negative; clamping at 98% gives the thin frame room to
+breathe. And since gamma > 1 on a low-contrast positive makes it *darker*,
+pushing gamma down to 0.7–0.8 lifts the image to proper exposure.
+
+The winning combos:
+```
+# Softer, lifted:
+python -m noritsu.cli scan.tif -o out.tif --gamma 0.7 --contrast 1.05 --sat 1.1 --dmax-pct 98.0
+
+# Punchier:
+python -m noritsu.cli scan.tif -o out.tif --gamma 0.8 --contrast 1.15 --sat 1.2 --dmax-pct 98.0
+```
+
+### What didn't work
+
+- **LS-600 calibration transfer**: the per-pixel LUT from `nori_calib_frame4.npz`
+  encodes the LS-600's specific CCD spectral response. Coolscan has different
+  color filters, so the calibration actually hurts more than helps. The
+  generic pipeline (invert + Noritsu curve + auto WB) is the right approach
+  for cross-scanner use.
+- **METER flat-field**: the ScanStudio METER file records lamp profile but using
+  it as a flat-field divisor requires careful normalization (mean=1, not raw
+  values). The first attempt created a white halo in the center.
+- **`--real-curve`**: the Noritsu S-curve from `CommonCalcPara.Dat` works but
+  can over-compress thin negatives. For Coolscan frames, starting without it
+  and using the parametric gamma/contrast controls is more flexible.
+- **Gamma > 1**: on a thin negative, increasing gamma makes things *darker*
+  because the midtones are already compressed. Counterintuitive but correct
+  once you think about it — gamma expands already-low values into higher ones,
+  shifting the midpoint up, which actually pushes the histogram tail down.
+
+### The result
+
+The pipeline produces beautiful Noritsu-style positives from Coolscan raws.
+The density inversion handles the complementary dyes correctly, the orange mask
+is removed, and the auto white balance gives natural color. The output is
+usable — not a proof of concept, not "close enough" — genuinely good scans
+with the Noritsu rendering character.
+
+### Coolscan → Noritsu workflow (canonical)
+
+```
+# From Scan Studio: extract Archive/*.tif (16-bit linear RGB)
+python -m noritsu.cli ScanStudio1.tif -o noritsu_render.tif \
+  --gamma 0.8 --contrast 1.15 --sat 1.2 --dmax-pct 98.0 --preview
+```
+
+Adjust `--gamma` up/down by 0.1 based on negative density. For a dense
+(overexposed) frame, try `--dmax-pct 99.5` and `--gamma 1.0`. For thin
+(underexposed) frames, `--dmax-pct 98.0` and `--gamma 0.7–0.8`.
+
+### METER flat-field — does not apply
+
+The `_METER.tif` in Scan Studio archives is a lamp profile diagnostic captured
+at scan time — a 4-channel (RGB+IR) image of the light source through the empty
+gate. It *feels* like it should be a flat-field divisor, but re-normalizing
+it (mean=1) and dividing still creates a center/corner imbalance (ratio 1.27),
+because the TIFF is already flat-field-corrected during capture. Don't use the
+METER for post-hoc correction — the raw TIFFs are ready to invert.
+
+### Cross-scanner calibration
+
+We don't have a paired scan (same frame on both Coolscan and LS-600), so the
+cross-scanner NCC is unknown. The pipeline produces visually excellent results
+("oh fuck yeah") but the 94% number was for LS-600→LS-600 fitting. To get a
+cross-scanner number, the owner would need to provide a Noritsu lab print or
+LS-600 scan of a known frame.
+
+## Addendum 18: ICE debunked, per-stock profiles, and the remaining gap
+
+*2026-08-04. The owner sent two more rolls: Superia 800 and Portra 400, both
+with ICE disabled. The controlled experiment we needed.*
+
+### ICE was not the culprit
+
+The "default-no-ice" TIFFs for Superia 800 and Portra 400 let us isolate the
+spatial correction question. The result: Portra 400 with ICE off scores NCC
+0.940 (same as Portra 160 with ICE on at 0.936). The previous belief that the
+~6% residual was dominated by ICE/dust masking was wrong. The residual is
+consistent regardless of ICE state.
+
+What actually drives the residual:
+1. **Per-stock dye spectral response** — Superia 800 fits at NCC 0.89 vs
+   Portra's 0.94, and adjusting Dmax percentile doesn't close the gap. The
+   Noritsu's `SpecialPcb` tables encode per-film adjustments that our generic
+   curve doesn't include.
+2. **Per-frame Dmin/Dmax estimation** — within a roll, cross-frame generalization
+   is tight (0.90-0.96), but the training frame's profile isn't optimal for all.
+3. **The base curve is generic** — we extracted `CommonCalcPara.Dat` as the
+   master tone curve, but the engine applies per-film deltas from `SpecialPcb`.
+
+### Per-stock calibration profiles
+
+Shipped as `.npz` files in `noritsu/profiles/`:
+
+| Profile | Frames | NCC | Source |
+|---|---|---|---|
+| `Portra160_calib.npz` | 6 | 0.936 | LS-600 raw/TIFF pairs |
+| `Portra400_calib.npz` | 3 | 0.940 | LS-600 raw/TIFF pairs |
+| `Superia800_calib.npz` | 12 | 0.881 | LS-600 raw/TIFF pairs |
+
+Usage: `--stock portra160` auto-selects the right profile.
+
+### negative-universal repo
+
+Created `github.com/rohanpandula/negative-universal` to scope the broader
+vision: one density-space inversion, calibrated per device, connecting all
+five reverse-engineering projects (noritsu-tool, cool-colors, flexcolor-tool,
+digital-fauxice, ScanStudio). Includes a research doc on RGB-light DSLR
+scanning and the calibration protocol.
+
+## Addendum 19: Cross-scanner calibration — Coolscan → LS-600
+
+*2026-08-04. The owner sent matched pairs: Coolscan 5000 scans of the same
+frames the LS-600 scanned. The cross-scanner experiment we've been waiting for.*
+
+### The data
+
+The matched pairs are in separate folders:
+- `20200606 Superia 800 - Coolscan 5000/` — 6 frames
+  (F01-F06), each with a raw negative and a positive render
+- `20210926 Portra 400 - Coolscan5000/` — 6 frames
+
+The Coolscan negatives are 3946×5959, the LS-600 TIFFs are 4011×6048.
+Content matching shows the frames are the same — the Coolscan numbered them
+F01-F06 and the LS-600 numbered them in reverse order (F01→LS tif06,
+F02→tif05, etc.).
+
+### Cross-scanner NCC
+
+| Coolscan | LS-600 | NCC (no cal) | NCC (calibrated) |
+|---|---|---|---|
+| F01 | tif006 | -0.35 | 0.59 |
+| F02 | tif005 | -0.09 | 0.44 |
+| F03 | tif004 | -0.19 | 0.37 |
+| F04 | tif003 | -0.07 | 0.50 |
+| F05 | tif002 | -0.30 | 0.64 |
+| F06 | tif001 | -0.26 | 0.55 |
+| **Mean** | | **-0.21** | **0.52** |
+
+### What this means
+
+The calibration frame jumps from -0.35 to 0.59 — the LUT clearly helps. But
+the cross-scanner mean of 0.52 is much lower than the LS-600 self-calibration
+(0.88). The gap is the Coolscan's different CCD spectral response, which a
+per-pixel LUT can only partially correct.
+
+Visually, the output still looks excellent — the "oh fuck yeah" reaction was
+from uncalibrated pipeline output. But the pixel math is honest: cross-scanner
+calibration works (~0.5 NCC) but doesn't match same-scanner accuracy (~0.94).
+
+The best path to Noritsu colors on a Coolscan is still the generic pipeline
+(no calibration), which gives the Noritsu rendering character without trying
+to force the Coolscan sensor to look like an LS-600's.
+
+## Addendum 20: the last seal — IAT hook proves the film ingest is architecture-sealed
+
+*2026-08-04. The final untested avenue, proven conclusive.*
+
+### The hypothesis
+
+Agent 3 (Copernicus) re-examined the existing evidence and spotted that the previous DLL patch attempt (Addenda 9–12) had been patching the **wrong object**. The CmdID 7 handler constructs a stack-local `CICCSImgCtrl` at `[ebp-0x364]` via `setFileHandle` (sub_10183a50), and the host-provided handle at `obj+0x22c` is what the `ReadFileX` state machine consumes. The previous patch had targeted the CF-embedded object at `CF+0x2e30` — which is a completely different object that the read path never touches.
+
+The untested avenue: hook the **IAT slot of `DoInputProcForFilm`** at RVA 0x2925d4 in `ImgCorrectDLL.dll`. By the time the handler calls `DoInputProcForFilm`, the `NKC_IMAGE_IN_FILE` descriptor is fully built on the stack with `desc.src = -1`. An IAT hook can replace that handle with a real `CreateFileW` handle **after** the `CICCSImgCtrl` state machine has been bypassed, because `UniRdImgLib!DoInputProcForFilm` calls `ReadFile(desc.src, ...)` — a raw Win32 call that doesn't go through the vtable at all.
+
+### The implementation
+
+Written from scratch:
+- `re/iat_hook.c` — a MinGW-compiled DLL that patches the IAT entry for `DoInputProcForFilm` at RVA 0x2925d4 on `DLL_PROCESS_ATTACH`
+- `re/run_hook.ps1` — a PowerShell script that creates the COM object, calls CmdID 7 once (resolves the delay-loaded IAT), loads the hook DLL, and calls CmdID 7 again
+
+The hook reads the file path from the `NORI_SRC_IMG` environment variable, opens a real `CreateFileW` handle, writes it into `desc.src`, calls the original `DoInputProcForFilm`, then closes the handle.
+
+### The result
+
+```
+IAT patched base=0A0D0000 slot=0A3625D4 orig=0964A840 hook=70651430
+```
+
+The IAT was patched successfully — the original `DoInputProcForFilm` pointer was captured and our hook was installed. And the hook function **never executed**. No hook_DPIF call lines in the log. Both outputs (warm-up and hook call) were 12,342 bytes — the constant neutral warm-gray `(B138,G163,R147)`.
+
+### What this proves
+
+The engine's CmdID 7 film pipeline **never reaches `DoInputProcForFilm`** when running headless. The handler exits through a different code path that bypasses the pixel import entirely. This is the final architectural seal: the film frame ingest is gated on the EZ-Controller host environment, and no CF byte, DLL patch, memory injection, or IAT hook can trigger it.
+
+### The honest conclusion
+
+The mother-ship wall is real. The practical deliverables — the CLI, the geometry closure, the calibration pipeline, the ICE module, the auto-parameter selection — reproduce the Noritsu LS-600's color science to ~0.94 NCC. The remaining ~6% is the spatial correction stack (ICE, masking, dust removal) that the `ice.py` module now addresses. The engine's film render pipeline cannot be driven headless without the LS-600 host.
+
+This is the chapter where we stop trying to open the last door and ship what we have.

@@ -42,20 +42,62 @@ pip install numpy pillow tifffile
 python -m noritsu.cli scan_of_negative.tif -o positive.tif
 ```
 
-Common options:
+Point the input at a **directory** instead of a file and every image inside is
+batch-processed into the `-o` directory:
+
+```
+python -m noritsu.cli ./negatives/ -o ./positives/
+```
+
+### The options you actually reach for
 
 | Option | Meaning |
 | --- | --- |
 | `--srgb-input` | your scan is sRGB-encoded (DSLR JPEG/flatbed): linearize it first |
-| `--black 0.02` | subtract a scanner black level (0..1) |
+| `--stock portra160` | use a per-stock profile fitted from real LS-600 pairs |
+| `--lab` | gentler, print-ready rendering (see [Lab mode](#lab-mode)) |
 | `--contrast 1.08` | tone-curve contrast |
-| `--sat 1.05` | saturation multiplier |
-| `--gamma 0.98` | midtone gamma |
-| `--wb R,G,B` | manual white-balance gains (else auto-neutralize) |
-| `--no-auto-wb` | disable auto white balance |
-| `--dmin R G B` | override film-base density (advanced) |
-| `--dmax R G B` | override max density (advanced) |
-| `--bits 8\|16` | output bit depth (default 16) |
+| `--gamma 0.8` | midtone gamma — *lower* lifts a thin negative |
+| `--preview` | also write an 8-bit JPEG beside the output for a quick look |
+
+### Full option reference
+
+**Input and output**
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `input` | *required* | negative image, or a directory to batch-process |
+| `-o`, `--output` | *required* | output positive, or output directory in batch mode |
+| `--bits 8\|16` | `16` | output bit depth |
+| `--preview` | off | also write an 8-bit JPEG preview beside the output |
+| `--srgb-input` | off | input is sRGB gamma-encoded; linearize before inverting |
+| `--black 0.02` | `0.0` | scanner black level to subtract (0..1) |
+| `--no-crop` | off | keep the clear margins instead of auto-cropping to the film area |
+
+**Inversion** — finding the orange mask and the density range
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--dmin R G B` | auto | override film-base density (the mask) per channel |
+| `--dmax R G B` | auto | override maximum density per channel |
+| `--dmin-pct` | `0.5` | percentile used for auto Dmin |
+| `--dmax-pct` | `99.8` | percentile used for auto Dmax — drop to `98.0` for a thin negative |
+| `--no-border` | off | ignore the film rebate when estimating Dmin; use the percentile instead |
+
+**Render** — tone and color
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--contrast` | `1.05` | tone-curve contrast |
+| `--gamma` | `0.98` | midtone gamma (lower is brighter on a thin negative) |
+| `--toe` | `0.02` | shadow lift |
+| `--sat`, `--saturation` | `1.0` | saturation multiplier |
+| `--wb R,G,B` | auto | manual white-balance gains |
+| `--no-auto-wb` | off | disable automatic white balance |
+| `--real-curve` | off | use the real Noritsu tone curve from `CommonCalcPara.Dat` (experimental; best with linear input) |
+| `--calib FILE.npz` | none | fit to your own reference render (see `noritsu/calibrate.py`) |
+| `--stock NAME` | none | per-stock profile: `portra160`, `portra400`, `superia800` |
+| `--lab` | off | lab-tech rendering; implies `--real-curve` |
 
 ### Getting the best result
 
