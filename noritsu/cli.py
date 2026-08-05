@@ -70,6 +70,9 @@ def main(argv=None):
     r.add_argument("--calib", type=str, default=None,
                    help="calibration .npz (from noritsu.calibrate) to match a "
                         "reference rendering (e.g. NLP Noritsu or a lab scan)")
+    r.add_argument("--stock", type=str, default=None,
+                   choices=["portra160", "portra400", "superia800"],
+                   help="auto-select a per-stock calibration profile (from real LS-600 pairs)")
 
     args = ap.parse_args(argv)
 
@@ -104,6 +107,14 @@ def run_one(in_path, out_path, args, quiet=False):
     if args.calib:
         from . import calibrate as calibmod
         calib = calibmod.load_calib(args.calib)
+    elif args.stock:
+        from . import calibrate as calibmod
+        import os
+        profile_path = os.path.join(os.path.dirname(__file__), "profiles", f"{args.stock}_calib.npz")
+        if os.path.exists(profile_path):
+            calib = calibmod.load_calib(profile_path)
+        elif not quiet:
+            print(f"  warning: no profile for {args.stock}, continuing without calibration")
 
     out, meta, wb = pipeline.process_negative(
         img,
