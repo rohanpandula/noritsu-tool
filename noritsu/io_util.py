@@ -49,6 +49,51 @@ def _load_raw(path):
     return np.clip(out, 0, 1).astype(np.float32)
 
 
+def _load_scanner_nef(path):
+    """Load a Nikon Scan scanner NEF (Coolscan) from its RGB SubIFD.
+
+    Scanner NEFs are TIFF-structured with the full-resolution processed RGB
+    image in a SubIFD chain (tag 0x014A); camera NEFs carry a Bayer CFA mosaic
+    there instead and must go through rawpy's demosaic path. Returns float32
+    RGB (H,W,3) in [0,1], or None when this is not a scanner NEF.
+    """
+    try:
+        import tifffile
+    except ImportError:
+        return None
+    try:
+        with tifffile.TiffFile(str(path)) as tif:
+            best = None
+            best_px = 0
+            for sub in tif.pages[0].pages or []:
+                tags = getattr(sub, "tags", None)
+                if tags is None:
+                    continue
+                photo = tags.get("PhotometricInterpretation")
+                comp = tags.get("Compression")
+                spp = tags.get("SamplesPerPixel")
+                photo_v = int(photo.value) if photo is not None else None
+                spp_v = int(spp.value) if spp is not None else 1
+                if photo_v == 32803:            # CFA mosaic
+                    return None
+                if comp is not None and int(comp.value) == 34713:  # Nikon NEF compression
+                    return None
+                if spp_v == 1 and sub.shape[0] * sub.shape[1] > 100_000:
+                    return None                 # large single-channel plane: camera raw
+                if photo_v == 2 and spp_v >= 3:
+                    px = sub.shape[0] * sub.shape[1]
+                    if px > best_px:
+                        best, best_px = sub, px
+            if best is None:
+                return None
+            arr = best.asarray()
+    except Exception:
+        return None
+    if arr.ndim == 3 and arr.shape[2] > 3:
+        arr = arr[:, :, :3]
+    return _normalize(np.ascontiguousarray(arr), False)
+
+
 RAW_EXTS = (".nef", ".dng", ".arw", ".cr2", ".cr3", ".arf", ".raf", ".orf", ".rw2")
 
 
@@ -57,8 +102,18 @@ def load_image(path, linearize_srgb=False):
 
     If the file is 16-bit, preserves full precision. Optionally applies
     sRGB EOTF (gamma decode) if the input is known to be sRGB-encoded.
+    Headerless LS-600 `.RAW` dumps and Coolscan scanner NEFs are detected
+    and decoded directly; camera raws still go through rawpy.
     """
     p = Path(path)
+    if p.suffix.lower() == ".raw":
+        from . import ls600raw
+        bgr = ls600raw.load_ls600_raw(p)
+        return np.ascontiguousarray(bgr[:, :, ::-1])  # sensor order is BGR
+    if p.suffix.lower() == ".nef":
+        img = _load_scanner_nef(p)
+        if img is not None:
+            return img
     if p.suffix.lower() in RAW_EXTS:
         return _load_raw(p)
     if p.suffix.lower() in (".tif", ".tiff"):
