@@ -29,7 +29,7 @@ def main(argv=None):
         prog="noritsu",
         description="Noritsu LS-600 style C-41 negative inversion.",
     )
-    ap.add_argument("input", help="input negative image (TIFF/PNG/JPG)")
+    ap.add_argument("input", help="input negative image (TIFF/PNG/JPG/NEF, or an LS-600 FULL*.RAW dump)")
     ap.add_argument("-o", "--output", required=True, help="output positive image")
     ap.add_argument("--bits", type=int, default=16, choices=[8, 16],
                     help="output bit depth (default 16)")
@@ -88,7 +88,7 @@ def main(argv=None):
     return run_one(args.input, args.output, args)
 
 
-EXTS = (".tif", ".tiff", ".png", ".jpg", ".jpeg", ".dng", ".nef")
+EXTS = (".tif", ".tiff", ".png", ".jpg", ".jpeg", ".dng", ".nef", ".raw")
 
 
 def run_batch(args):

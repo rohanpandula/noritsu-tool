@@ -196,9 +196,19 @@ from noritsu.ls600raw import load_ls600_raw
 arr = load_ls600_raw("FULL000000010000.RAW")   # float32 (6391,4042,3) BGR [0,1]
 ```
 
-Feed that straight into the CLI or `pipeline.process_negative`. The loader is
-new; sizes/order were recovered from real LS-600 frames and verified against
-the machine's own outputs.
+The CLI reads them directly — `python -m noritsu.cli FULL000000010000.RAW -o
+out.tif` — and batch mode picks up `.RAW` files alongside TIFFs. The format
+carries no header, so dimensions are recovered from the byte count: exact
+match against known frames first, then known-axis division (a 4042-wide frame
+of any length), then a unique-factorization fallback; a file whose size is
+ambiguous is refused rather than guessed. The 12-bit container is sensed from
+the data, so a hypothetical 16-bit dump won't be blown out 16×. Sizes/order
+were recovered from real LS-600 frames and verified against the machine's own
+outputs (and independently agree with the loader in NegPy PR #765).
+
+Coolscan scanner NEFs are also detected structurally (RGB SubIFD, no Bayer
+mosaic) and read via tifffile without a rawpy demosaic pass, which would
+otherwise mangle them; camera NEFs still go to rawpy.
 
 See `samples/compare.jpg` for a side-by-side.
 

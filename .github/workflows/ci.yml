@@ -19,5 +19,7 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Round-trip inversion accuracy
         run: python test_roundtrip.py
+      - name: Ingestion (LS-600 RAW dims, NEF routing)
+        run: python test_ingest.py
       - name: CLI smoke (plain, --real-curve, --lab, profiles)
         run: python scripts/ci_smoke.py
